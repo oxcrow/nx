@@ -1,5 +1,5 @@
 # nx
 
-nx functional language compiler.
+nx compiler.
 
-*(Note: Bleedng edge code is hosted on `dev` branches. Not `master`.)*
+*(Note: Latest code is hosted on `dev` branches. Not `master`.)*
