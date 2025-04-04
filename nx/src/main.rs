@@ -1,3 +1,3 @@
 fn main() {
-    nx::dev();
+    nx::dev().expect("Compiler failed");
 }
