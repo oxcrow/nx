@@ -1,4 +1,5 @@
-mod error;
+pub mod error;
+pub mod lexer;
 
 use error::Result;
 

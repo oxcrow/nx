@@ -21,3 +21,7 @@ serde = "1.0.219"
 [dev-dependencies]
 # performance
 criterion = "0.5.1"
+
+[[bench]]
+name = "lexer"
+harness = false
