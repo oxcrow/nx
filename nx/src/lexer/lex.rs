@@ -179,7 +179,7 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
     // + Since we do not use regex this is the only safe way.
     let (token, remaining_code) = if token.is_none() {
         let new_token = {
-            if word.chars().all(character_is_integer) {
+            if word.chars().nth(0) != Some('_') && word.chars().all(character_is_integer) {
                 Token::IntVal(word)
             } else {
                 Token::None
@@ -225,8 +225,11 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
     }
 
     fn search_next_word(code: &str) -> (&str, &str) {
-        let next_delimiter_character_index =
-            { code.chars().position(character_is_delimiter).unwrap_or(0) };
+        let next_delimiter_character_index = {
+            code.chars()
+                .position(character_is_delimiter)
+                .unwrap_or(code.len())
+        };
         let current_character_is_delimiter = next_delimiter_character_index == 0;
         let word = if current_character_is_delimiter {
             &code[0..1] // BUG: Won't work for multi-character delimiters like ++ --
@@ -286,6 +289,8 @@ mod test {
         let _h = tokenize_string("/// this is a documentation comment\n fn main() {}")?;
         let _i = tokenize_string("// this is a comment\n fn main() {}")?;
         let _j = tokenize_string("// this is a comment /// with a nested comment\n fn main() {}")?;
+        let _k = tokenize_string("0 _ _0 0_ 000_000_000")?;
+        let _l = tokenize_string("123_456_789")?;
         Ok(())
     }
 }
