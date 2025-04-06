@@ -1,6 +1,6 @@
 use crate::error::{ensure, Result};
 //
-use crate::lexer::token::Token;
+use crate::lexer::token::{SourceSpan, Token};
 
 /// Tokenize code.
 ///
@@ -44,10 +44,12 @@ pub fn tokenize_string_standard<'code>(
         tokens.reserve(guess_num_tokens - tokens.capacity());
     }
 
+    let mut code_index = 0;
+
     // Tokenize one by one until the code is not empty
     while !code.is_empty() {
         // Find next token
-        let (token, remaining_code) = tokenize_next_word(code)?;
+        let (token, remaining_code, new_code_index) = tokenize_next_word(code, code_index)?;
         // Check if token is identified corrrectly
         ensure!(!token.is_none(), "Token::None was found during lexing.");
         // Check for memory overflow
@@ -60,6 +62,7 @@ pub fn tokenize_string_standard<'code>(
         // Truncate code to process rest of the remaining code
         // Warning: Without this the loop will run forever
         code = remaining_code;
+        code_index = new_code_index;
     }
 
     Ok(tokens)
@@ -76,15 +79,16 @@ pub fn tokenize_string_standard<'code>(
 /// + Match the word in two steps as,
 ///   - Check if the word is a reserved token (use peek).
 ///   - Check if the word is a float, integer, string, or identifier.
-pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
-    let code = truncate_leading_whitespace(code);
+pub fn tokenize_next_word(code: &str, code_index: usize) -> Result<(Token, &str, usize)> {
+    let (code, code_index) = truncate_leading_whitespace(code, code_index);
 
-    let (word, remaining_code) = search_next_word(code);
+    let (word, remaining_code, new_index) = search_next_word(code, code_index);
+    let span = SourceSpan::new(code_index, code_index + word.len());
 
     // Tokenize documentation comments
     if word == "/" {
-        let (next_word_1, remaining_code) = search_next_word(remaining_code);
-        let (next_word_2, remaining_code) = search_next_word(remaining_code);
+        let (next_word_1, remaining_code, new_index) = search_next_word(remaining_code, new_index);
+        let (next_word_2, remaining_code, _________) = search_next_word(remaining_code, new_index);
         if next_word_1 == "/" && next_word_2 == "/" {
             let next_newline_index = remaining_code
                 .chars()
@@ -92,14 +96,15 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
                 .unwrap_or(remaining_code.len());
             let remaining_truncated_code = &remaining_code[next_newline_index..];
             let comment = &code[0..(next_newline_index + 3)];
-            let token = Token::Documentation(comment);
-            return Ok((token, remaining_truncated_code));
+            let span = SourceSpan::new(code_index, code_index + comment.len());
+            let token = Token::Documentation(span, comment);
+            return Ok((token, remaining_truncated_code, span.end as usize));
         }
     }
 
     // Tokenize comments
     if word == "/" {
-        let (next_word, remaining_code) = search_next_word(remaining_code);
+        let (next_word, remaining_code, _) = search_next_word(remaining_code, new_index);
         if next_word == "/" {
             let next_newline_index = remaining_code
                 .chars()
@@ -107,80 +112,81 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
                 .unwrap_or(remaining_code.len());
             let remaining_truncated_code = &remaining_code[next_newline_index..];
             let comment = &code[0..(next_newline_index + 2)];
-            let token = Token::Comment(comment);
-            return Ok((token, remaining_truncated_code));
+            let span = SourceSpan::new(code_index, code_index + comment.len());
+            let token = Token::Comment(span, comment);
+            return Ok((token, remaining_truncated_code, span.end as usize));
         }
     }
 
     // Tokenize reserved words
     let token = match word {
         // Symbols
-        ";" => Token::Semicolon,
-        ":" => Token::Colon,
-        "," => Token::Comma,
-        "." => Token::Dot,
+        ";" => Token::Semicolon(span, word),
+        ":" => Token::Colon(span, word),
+        "," => Token::Comma(span, word),
+        "." => Token::Dot(span, word),
         //
-        "=" => Token::Equal,
-        "+" => Token::Plus,
-        "-" => Token::Minus,
-        "*" => Token::Star,
-        "/" => Token::Slash,
+        "=" => Token::Equal(span, word),
+        "+" => Token::Plus(span, word),
+        "-" => Token::Minus(span, word),
+        "*" => Token::Star(span, word),
+        "/" => Token::Slash(span, word),
         //
-        "(" => Token::LParenthesis,
-        ")" => Token::RParenthesis,
-        "[" => Token::LBracket,
-        "]" => Token::RBracket,
-        "<" => Token::LAngle,
-        ">" => Token::RAngle,
-        "{" => Token::LBrace,
-        "}" => Token::RBrace,
+        "(" => Token::LParenthesis(span, word),
+        ")" => Token::RParenthesis(span, word),
+        "[" => Token::LBracket(span, word),
+        "]" => Token::RBracket(span, word),
+        "<" => Token::LAngle(span, word),
+        ">" => Token::RAngle(span, word),
+        "{" => Token::LBrace(span, word),
+        "}" => Token::RBrace(span, word),
         //
-        "!" => Token::Exclamation,
-        "?" => Token::Question,
-        "$" => Token::Dollar,
-        "#" => Token::Hash,
+        "!" => Token::Exclamation(span, word),
+        "?" => Token::Question(span, word),
+        "$" => Token::Dollar(span, word),
+        "#" => Token::Hash(span, word),
 
         // Directives
-        "use" => Token::Use,
-        "let" => Token::Let,
-        "var" => Token::Var,
-        "as" => Token::As,
-        "in" => Token::In,
-        "return" => Token::Return,
-        "break" => Token::Break,
-        "continue" => Token::Continue,
+        "use" => Token::Use(span, word),
+        "let" => Token::Let(span, word),
+        "var" => Token::Var(span, word),
+        "as" => Token::As(span, word),
+        "in" => Token::In(span, word),
+        "return" => Token::Return(span, word),
+        "break" => Token::Break(span, word),
+        "continue" => Token::Continue(span, word),
 
         // Blocks
-        "macro" => Token::Macro,
-        "module" => Token::Module,
-        "fn" => Token::Fn,
-        "struct" => Token::Struct,
-        "enum" => Token::Enum,
-        "instance" => Token::Instance,
-        "implement" => Token::Implement,
-        "match" => Token::Match,
-        "if" => Token::If,
-        "else" => Token::Else,
-        "for" => Token::For,
-        "while" => Token::While,
-        "loop" => Token::Loop,
+        "macro" => Token::Macro(span, word),
+        "module" => Token::Module(span, word),
+        "fn" => Token::Fn(span, word),
+        "struct" => Token::Struct(span, word),
+        "enum" => Token::Enum(span, word),
+        "instance" => Token::Instance(span, word),
+        "implement" => Token::Implement(span, word),
+        "match" => Token::Match(span, word),
+        "if" => Token::If(span, word),
+        "else" => Token::Else(span, word),
+        "for" => Token::For(span, word),
+        "while" => Token::While(span, word),
+        "loop" => Token::Loop(span, word),
 
         // Types
-        "()" => Token::Unit,
-        "usize" => Token::Usize,
-        "int" => Token::Int,
-        "flt" => Token::Flt,
-        "str" => Token::Str,
-        "i8" => Token::I8,
-        "u8" => Token::U8,
-        "i16" => Token::I16,
-        "u16" => Token::U16,
-        "i32" => Token::I32,
-        "u32" => Token::U32,
-        "i64" => Token::I64,
-        "u64" => Token::U64,
-        "f32" => Token::F32,
-        "f64" => Token::F64,
+        "()" => Token::Unit(span, word),
+        "usize" => Token::Usize(span, word),
+        "int" => Token::Int(span, word),
+        "flt" => Token::Flt(span, word),
+        "str" => Token::Str(span, word),
+        "i8" => Token::I8(span, word),
+        "u8" => Token::U8(span, word),
+        "i16" => Token::I16(span, word),
+        "u16" => Token::U16(span, word),
+        "i32" => Token::I32(span, word),
+        "u32" => Token::U32(span, word),
+        "i64" => Token::I64(span, word),
+        "u64" => Token::U64(span, word),
+        "f32" => Token::F32(span, word),
+        "f64" => Token::F64(span, word),
 
         _ => Token::None,
     };
@@ -195,7 +201,7 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
     let (token, remaining_code) = if token.is_none() {
         let new_token = {
             if word.chars().nth(0) != Some('_') && word.chars().all(character_is_integer) {
-                Token::IntVal(word)
+                Token::IntVal(span, word)
             } else {
                 Token::None
             }
@@ -213,7 +219,7 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
     let (token, remaining_code) = if token.is_none() {
         let new_token = {
             if word.chars().all(character_is_identifier) {
-                Token::IdxVal(word)
+                Token::IdxVal(span, word)
             } else {
                 Token::None
             }
@@ -225,16 +231,17 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
 
     // where ...
 
-    fn truncate_leading_whitespace(code: &str) -> &str {
+    fn truncate_leading_whitespace(code: &str, code_index: usize) -> (&str, usize) {
         let next_non_whitespace_character_index = {
             code.chars()
                 .position(|c| c != ' ' && c != '\t' && c != '\n')
                 .unwrap_or(0)
         };
-        &code[next_non_whitespace_character_index..]
+        let new_index = code_index + next_non_whitespace_character_index;
+        (&code[next_non_whitespace_character_index..], new_index)
     }
 
-    fn search_next_word(code: &str) -> (&str, &str) {
+    fn search_next_word(code: &str, code_index: usize) -> (&str, &str, usize) {
         let next_delimiter_character_index = {
             code.chars()
                 .position(character_is_delimiter)
@@ -246,7 +253,7 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
         } else {
             &code[0..next_delimiter_character_index]
         };
-        (word, &code[word.len()..])
+        (word, &code[word.len()..], code_index + word.len())
     }
 
     fn character_is_delimiter(c: char) -> bool {
@@ -280,7 +287,7 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
         }
     }
 
-    Ok((token, remaining_code))
+    Ok((token, remaining_code, span.end as usize))
 }
 
 #[cfg(test)]
