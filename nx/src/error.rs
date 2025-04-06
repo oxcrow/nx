@@ -1,3 +1,4 @@
-pub(crate) use miette::Result;
+pub use miette::Result;
 //
-pub(crate) use miette::ensure;
+pub use miette::ensure;
+pub use miette::Context;

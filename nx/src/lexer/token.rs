@@ -14,7 +14,7 @@ pub struct SourceSpan {
 /// The tokens are expected to exist as long as the code.
 /// + This is necessary as the IntVal, IdxVal, StrVal etc.
 ///   use references to strings stored within the code.
-#[derive(Default, Debug, EnumAsInner)]
+#[derive(Default, Debug, Clone, Copy, EnumAsInner)]
 pub enum Token<'code> {
     Documentation(SourceSpan, &'code str),
     Comment(SourceSpan, &'code str),
@@ -102,5 +102,9 @@ impl SourceSpan {
             start: start_index as u32,
             end: end_index as u32,
         }
+    }
+
+    pub fn none() -> Self {
+        SourceSpan::default()
     }
 }
