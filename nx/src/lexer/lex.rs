@@ -10,23 +10,36 @@ use crate::lexer::token::Token;
 /// Thus this method is expected to be used mostly for tokenizing
 /// large sections of code (such as files). Not small lines of code.
 ///
-/// This can be slow if used in a hot loop.
+/// This can be slow if used in performance critical code.
 #[allow(clippy::needless_lifetimes)]
 pub fn tokenize_string<'code>(code: &'code str) -> Result<Vec<Token<'code>>> {
     tokenize_string_standard(code, vec![])
 }
 
+/// Tokenize code.
+///
+/// # Performance Consideration
+///
+/// A Vec<Token> is required as an argument to return the result.
+///
+/// Thus to optimize performance tokens should be preallocated.
+/// Internally the tokens.capacity() is checked and only allocated
+/// if the current exisitng allocated memory capacity is not enough.
+///
+/// This can be used in performance critical code.
 pub fn tokenize_string_standard<'code>(
     mut code: &'code str,
     mut tokens: Vec<Token<'code>>,
 ) -> Result<Vec<Token<'code>>> {
     ensure!(!code.is_empty(), "code can not be empty string");
+    tokens.clear();
 
     // Allocate enough memory for tokens
     let num_lines = code.chars().filter(|&c| c == '\n').count();
-    let guess_num_tokens_per_line = 10;
+    let guess_num_tokens_per_line = 20;
     let guess_num_tokens = (num_lines + 1) * guess_num_tokens_per_line;
-    let max_num_tokens = guess_num_tokens * 10;
+    let max_num_tokens = guess_num_tokens * 5;
+    //
     if tokens.capacity() < guess_num_tokens {
         tokens.reserve(guess_num_tokens - tokens.capacity());
     }
@@ -35,13 +48,15 @@ pub fn tokenize_string_standard<'code>(
     while !code.is_empty() {
         // Find next token
         let (token, remaining_code) = tokenize_next_word(code)?;
-        // Store token
-        tokens.push(token);
+        // Check if token is identified corrrectly
+        ensure!(!token.is_none(), "Token::None was found during lexing.");
         // Check for memory overflow
         ensure!(
             tokens.len() < max_num_tokens,
             "can not store more than max_num_tokens as it may cause memory overflow"
         );
+        // Store token
+        tokens.push(token);
         // Truncate code to process rest of the remaining code
         // Warning: Without this the loop will run forever
         code = remaining_code;
@@ -207,11 +222,6 @@ pub fn tokenize_next_word(code: &str) -> Result<(Token, &str)> {
     } else {
         (token, remaining_code)
     };
-
-    ensure!(
-        !token.is_none(),
-        "token is Token::None thus it has not been identified correctly"
-    );
 
     // where ...
 
